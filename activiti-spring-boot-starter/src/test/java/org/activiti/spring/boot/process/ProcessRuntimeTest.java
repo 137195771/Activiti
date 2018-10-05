@@ -1,5 +1,6 @@
 package org.activiti.spring.boot.process;
 
+import org.activiti.api.model.shared.model.VariableInstance;
 import org.activiti.api.process.model.ProcessDefinition;
 import org.activiti.api.process.model.ProcessInstance;
 import org.activiti.api.process.model.builders.ProcessPayloadBuilder;
@@ -19,6 +20,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringRunner;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -328,6 +331,46 @@ public class ProcessRuntimeTest {
     public void userFailTest() {
         Page<ProcessDefinition> processDefinitionPage = processRuntime.processDefinitions(Pageable.of(0,
                 50));
+    }
+
+    @Test
+    @WithUserDetails(value = "salaboy", userDetailsServiceBeanName = "myUserDetailsService")
+    public void processInstanceHasInitialVariables() {
+
+        ProcessRuntimeConfiguration configuration = processRuntime.configuration();
+        assertThat(configuration).isNotNull();
+        Page<ProcessDefinition> processDefinitionPage = processRuntime.processDefinitions(Pageable.of(0,
+                50));
+        assertThat(processDefinitionPage.getContent()).isNotNull();
+        assertThat(processDefinitionPage.getContent()).extracting((ProcessDefinition pd) -> pd.getKey())
+                .contains(CATEGORIZE_HUMAN_PROCESS);
+
+
+        // start a process with a business key to check filters
+        ProcessInstance categorizeProcess = processRuntime.start(ProcessPayloadBuilder.start()
+                .withProcessDefinitionKey(CATEGORIZE_HUMAN_PROCESS)
+                .withVariable("expectedKey",
+                        true)
+                .withBusinessKey("my business key")
+                .build());
+
+        assertThat(categorizeProcess).isNotNull();
+        assertThat(categorizeProcess.getStatus()).isEqualTo(ProcessInstance.ProcessInstanceStatus.RUNNING);
+
+        Page<ProcessInstance> processInstancePage = processRuntime.processInstances(Pageable.of(0,
+                50));
+
+        assertThat(processInstancePage).isNotNull();
+        assertThat(processInstancePage.getContent()).hasSize(1);
+
+        List<VariableInstance> variableInstances = processRuntime.variables(ProcessPayloadBuilder.variables().withProcessInstance(categorizeProcess).build());
+
+        assertThat(variableInstances).isNotNull();
+        assertThat(variableInstances).hasSize(2);
+
+        assertThat(variableInstances).extracting("name")
+                .contains("expectedKey", "customVar");
+
     }
 
 
